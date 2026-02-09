@@ -46,7 +46,7 @@ jobs:
 
     - name: Log and Update Deployment
       if: always()
-      uses: ./.github/actions/log-and-update-deployment
+      uses: ramaeondev/therama.dev/.github/actions/log-and-update-deployment@master
       with:
         start_time: ${{ env.START_TIME }}
         s3_bucket: ${{ secrets.S3_UPLOAD_BUCKET }}
