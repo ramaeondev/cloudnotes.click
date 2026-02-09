@@ -1,4 +1,4 @@
-name: Deploy to AWS S3
+name: Vercel Deployment
 
 on:
   push:
@@ -24,76 +24,29 @@ jobs:
         cache: 'npm'
 
     - name: Install dependencies
-      run: npm install
-
-    - name: Cache Next.js build
-      uses: actions/cache@v3
-      with:
-        path: |
-          .next/cache
-        key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-nextjs-
-    
-    - name: Copy README and package.json to public/
-      run: |
-        mkdir -p public/meta
-        cp README.md public/meta/
-        cp package.json public/meta/
-
-    - name: Read package.json and POST to Projects table          
-      run: |
-          VERSION=$(jq -r '.version' package.json)
-          STATUS=$(jq -r '.status' package.json)
-          PROJECT_ID=$(jq -r '.project_id' package.json)
-          update_project_version=$(jq -r '.update_project_version' package.json)
-  
-          echo "Version: $VERSION"
-          echo "Status: $STATUS"
-          echo "Project ID: $PROJECT_ID"
-          echo "update_project_version: $update_project_version"
-  
-          RESPONSE=$(curl -s -X POST $update_project_version \
-            -H "Content-Type: application/json" \
-            -d '{
-              "project_id": "'"$PROJECT_ID"'",
-              "version": "'"$VERSION"'",
-              "status": "'"$STATUS"'"
-            }')
-  
-          echo "$RESPONSE" > deployment-status.json
-  
-    - name: Upload deployment status as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: deployment-status
-        path: deployment-status.json
-
-    - name: Build application
-      run:  npm run build
+      run: npm ci
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v3
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_GLOBAL }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_GLOBAL }}
         aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: Deploy to S3
-      run: |
-          aws s3 sync out/ s3://${{ secrets.S3_BUCKET }} --delete
-          aws s3 cp s3://${{ secrets.S3_BUCKET }}/_next s3://${{ secrets.S3_BUCKET }}/_next --recursive --cache-control "public, max-age=31536000, immutable"
-          aws s3 cp s3://${{ secrets.S3_BUCKET }}/static s3://${{ secrets.S3_BUCKET }}/static --recursive --cache-control "public, max-age=31536000, immutable"
-    
-    - name: Invalidate CloudFront cache
-      run: |
-        aws cloudfront create-invalidation \
-          --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-          --paths "/*"
-    
+    - name: Deploy to Vercel
+      uses: amondnet/vercel-action@v25
+      env:
+        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: ./
+        vercel-args: --prod
+
     - name: Log and Update Deployment
       if: always()
-      uses: ramaeondev/therama.dev/.github/actions/log-and-update-deployment@master
+      uses: ./.github/actions/log-and-update-deployment
       with:
         start_time: ${{ env.START_TIME }}
         s3_bucket: ${{ secrets.S3_UPLOAD_BUCKET }}
